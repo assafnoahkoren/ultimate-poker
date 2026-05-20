@@ -69,7 +69,7 @@ export function SettingsScreen({
           <h2 className="text-xs uppercase tracking-wider text-white/60">
             Bet sizes (same for all players)
           </h2>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {BET_FIELDS.map(({ key, label }) => (
               <div key={key} className="flex flex-col">
                 <label className="text-[10px] uppercase text-white/50 text-center mb-1">
@@ -87,8 +87,8 @@ export function SettingsScreen({
             ))}
           </div>
           <div className="text-[10px] text-white/40">
-            Trips and Bonus are placeholders. Bet, Ante, and Play scale the
-            chip labels but the strategy decisions are scale-invariant.
+            Play is dynamic (4× / 2× / 1× × Ante driven by the strategy) so
+            it's not editable here. Trips and Bonus are placeholders.
           </div>
         </section>
 

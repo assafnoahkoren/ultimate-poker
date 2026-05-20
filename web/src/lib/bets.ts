@@ -6,10 +6,12 @@
 // integration with the Trips paytable and a (not-yet-implemented) Bonus
 // wager.
 
+// Play is excluded from this struct — it's dynamic (4× / 2× / 1× × Ante,
+// driven by the strategy's chosen action) and rendered from per-hand state,
+// not from settings.
 export interface BetSettings {
   bet: number;
   ante: number;
-  play: number;
   trips: number;
   bonus: number;
 }
@@ -17,7 +19,6 @@ export interface BetSettings {
 export const DEFAULT_BETS: BetSettings = {
   bet: 1,
   ante: 1,
-  play: 1,
   trips: 0,
   bonus: 0,
 };
@@ -25,7 +26,6 @@ export const DEFAULT_BETS: BetSettings = {
 export const BET_FIELDS: Array<{ key: keyof BetSettings; label: string }> = [
   { key: 'bet', label: 'Bet' },
   { key: 'ante', label: 'Ante' },
-  { key: 'play', label: 'Play' },
   { key: 'trips', label: 'Trips' },
   { key: 'bonus', label: 'Bonus' },
 ];
