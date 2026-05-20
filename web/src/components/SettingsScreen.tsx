@@ -8,12 +8,24 @@ import {
   rowReturn,
   tripsReturn,
 } from '../lib/trips';
+import type { BonusPaytable } from '../lib/bonus';
+import {
+  BONUS_COMBOS,
+  BONUS_ROW_LABELS,
+  BONUS_TOTAL_COMBOS,
+  DEFAULT_BONUS,
+  bonusProbability,
+  bonusReturn,
+  bonusRowReturn,
+} from '../lib/bonus';
 import type { BetSettings } from '../lib/bets';
 import { BET_FIELDS, DEFAULT_BETS } from '../lib/bets';
 
 interface Props {
   paytable: TripsPaytable;
   setPaytable: (p: TripsPaytable) => void;
+  bonusPaytable: BonusPaytable;
+  setBonusPaytable: (p: BonusPaytable) => void;
   bets: BetSettings;
   setBets: (b: BetSettings) => void;
   onClose: () => void;
@@ -22,16 +34,25 @@ interface Props {
 export function SettingsScreen({
   paytable,
   setPaytable,
+  bonusPaytable,
+  setBonusPaytable,
   bets,
   setBets,
   onClose,
 }: Props) {
   const ret = tripsReturn(paytable);
+  const bonusRet = bonusReturn(bonusPaytable);
 
   const updatePay = (key: keyof TripsPaytable, value: string) => {
     const n = Number(value);
     if (!Number.isFinite(n)) return;
     setPaytable({ ...paytable, [key]: n });
+  };
+
+  const updateBonus = (key: keyof BonusPaytable, value: string) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    setBonusPaytable({ ...bonusPaytable, [key]: n });
   };
 
   const updateBet = (key: keyof BetSettings, value: string) => {
@@ -48,6 +69,7 @@ export function SettingsScreen({
           <button
             onClick={() => {
               setPaytable({ ...DEFAULT_TRIPS });
+              setBonusPaytable({ ...DEFAULT_BONUS });
               setBets({ ...DEFAULT_BETS });
             }}
             className="text-xs px-2 py-1 rounded bg-white/10 active:bg-white/20"
@@ -179,6 +201,98 @@ export function SettingsScreen({
             <span className="text-white/40">House edge:</span>{' '}
             <span className="font-bold">{(-ret * 100).toFixed(3)}%</span>{' '}
             <span className="text-white/40">on the Trips bet</span>
+          </div>
+        </section>
+
+        {/* Bonus paytable */}
+        <section className="space-y-2">
+          <h2 className="text-xs uppercase tracking-wider text-white/60">
+            Bonus paytable (Common Progressive)
+          </h2>
+          <div className="text-[11px] text-white/60">
+            Hero's 2 hole cards + the 3 flop cards (5-card hand,
+            C(52,5) = {BONUS_TOTAL_COMBOS.toLocaleString()} combos).
+            Pays are on a <span className="font-bold">"for one"</span> basis —
+            the win <em>includes</em> your stake.
+          </div>
+
+          <div className="rounded-lg overflow-hidden border border-white/10">
+            <div className="grid grid-cols-[1.4fr_1fr_0.9fr_1fr_1.1fr] text-[10px] uppercase tracking-wider bg-white/5 text-white/50">
+              <div className="px-2 py-1.5">Hand</div>
+              <div className="px-2 py-1.5 text-right">Combos</div>
+              <div className="px-2 py-1.5 text-right">Pays</div>
+              <div className="px-2 py-1.5 text-right">Prob</div>
+              <div className="px-2 py-1.5 text-right">Return</div>
+            </div>
+
+            {BONUS_ROW_LABELS.map(({ key, label }) => {
+              const prob = bonusProbability(key);
+              const r = bonusRowReturn(key, bonusPaytable);
+              return (
+                <div
+                  key={key}
+                  className="grid grid-cols-[1.4fr_1fr_0.9fr_1fr_1.1fr] text-xs items-center border-t border-white/10"
+                >
+                  <div className="px-2 py-1.5">{label}</div>
+                  <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
+                    {BONUS_COMBOS[key].toLocaleString()}
+                  </div>
+                  <div className="px-1 py-1">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={bonusPaytable[key]}
+                      onChange={(e) => updateBonus(key, e.target.value)}
+                      className="w-full bg-white/10 rounded px-1.5 py-1 text-right text-white font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    />
+                  </div>
+                  <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
+                    {(prob * 100).toFixed(3)}%
+                  </div>
+                  <div className="px-2 py-1.5 text-right tabular-nums">
+                    {r >= 0 ? '+' : ''}
+                    {r.toFixed(5)}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="grid grid-cols-[1.4fr_1fr_0.9fr_1fr_1.1fr] text-xs items-center border-t border-white/10 bg-white/5">
+              <div className="px-2 py-1.5 text-white/70">All other</div>
+              <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
+                {BONUS_COMBOS.allOther.toLocaleString()}
+              </div>
+              <div className="px-2 py-1.5 text-right text-white/60">0</div>
+              <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
+                {(bonusProbability('allOther') * 100).toFixed(3)}%
+              </div>
+              <div className="px-2 py-1.5 text-right text-rose-300 tabular-nums">
+                −{(BONUS_COMBOS.allOther / BONUS_TOTAL_COMBOS).toFixed(5)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[1.4fr_1fr_0.9fr_1fr_1.1fr] text-sm font-bold items-center border-t border-white/10 bg-black/30">
+              <div className="px-2 py-2">Total return</div>
+              <div className="px-2 py-2 text-right text-white/60 tabular-nums">
+                {BONUS_TOTAL_COMBOS.toLocaleString()}
+              </div>
+              <div className="px-2 py-2 text-right text-white/60">—</div>
+              <div className="px-2 py-2 text-right text-white/60">1</div>
+              <div
+                className={`px-2 py-2 text-right tabular-nums ${
+                  bonusRet > 0 ? 'text-emerald-300' : bonusRet < 0 ? 'text-rose-300' : 'text-white'
+                }`}
+              >
+                {bonusRet >= 0 ? '+' : ''}
+                {bonusRet.toFixed(5)}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-white/60">
+            <span className="text-white/40">House edge:</span>{' '}
+            <span className="font-bold">{(-bonusRet * 100).toFixed(3)}%</span>{' '}
+            <span className="text-white/40">on the Bonus bet</span>
           </div>
         </section>
       </div>
