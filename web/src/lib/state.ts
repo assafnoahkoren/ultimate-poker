@@ -19,9 +19,12 @@ import type {
   PreFlopAction,
   FlopAction,
   RiverAction,
+  PreFlopAdvice,
+  FlopAdvice,
+  RiverAdvice,
   SettleResult,
 } from './strategy';
-import { preFlopDecision, flopDecision, riverDecision, settle } from './strategy';
+import { preFlopAdvice, flopAdvice, riverAdvice, settle } from './strategy';
 
 export type Phase =
   | { kind: 'setup' }
@@ -44,6 +47,10 @@ export interface PlayerState {
   preFlop: PreFlopAction | null;
   flop: FlopAction | null;
   river: RiverAction | null;
+  // Per-phase advice details for the UI to display (equity + EV + stake).
+  preFlopAdv: PreFlopAdvice | null;
+  flopAdv: FlopAdvice | null;
+  riverAdv: RiverAdvice | null;
   // Final settlement (set during showdown).
   result: SettleResult | null;
 }
@@ -55,6 +62,9 @@ export interface GameState {
   dealer: [Card | null, Card | null];
   picked: Set<Card>;
   phase: Phase;
+  // Stack of prior states. Pushed on every card pick so we can undo back to
+  // before the last pick (which also reverses any auto-applied advice).
+  history: GameState[];
 }
 
 export function initialState(): GameState {
@@ -65,6 +75,7 @@ export function initialState(): GameState {
     dealer: [null, null],
     picked: new Set(),
     phase: { kind: 'setup' },
+    history: [],
   };
 }
 
@@ -76,6 +87,9 @@ export function newPlayer(): PlayerState {
     preFlop: null,
     flop: null,
     river: null,
+    preFlopAdv: null,
+    flopAdv: null,
+    riverAdv: null,
     result: null,
   };
 }
@@ -90,6 +104,7 @@ export function startGame(state: GameState, numPlayers: number): GameState {
     board: [null, null, null, null, null],
     dealer: [null, null],
     phase: { kind: 'dealing-holes', playerIdx: 0, slot: 0 },
+    history: [],
   };
 }
 
@@ -98,9 +113,23 @@ export function reset(): GameState {
 }
 
 // Called when the user taps a card. Adds the card to the appropriate slot
-// based on the current phase and advances the state machine.
+// based on the current phase and advances the state machine. The previous
+// state is pushed onto the history stack so `undo` can revert this pick.
 export function pickCard(state: GameState, card: Card): GameState {
   if (state.picked.has(card)) return state;
+  const snapshot = state;
+  const result = pickCardInternal(state, card);
+  return { ...result, history: [...state.history, snapshot] };
+}
+
+// Revert the last card pick. Returns the prior state (which itself has the
+// history up to that point, so additional undos keep walking backward).
+export function undo(state: GameState): GameState {
+  if (state.history.length === 0) return state;
+  return state.history[state.history.length - 1];
+}
+
+function pickCardInternal(state: GameState, card: Card): GameState {
   const picked = new Set(state.picked);
   picked.add(card);
 
@@ -169,14 +198,26 @@ export function pickCard(state: GameState, card: Card): GameState {
   }
 }
 
+function otherHolesOf(state: GameState, exceptIdx: number): Card[] {
+  const out: Card[] = [];
+  for (let i = 0; i < state.players.length; i++) {
+    if (i === exceptIdx) continue;
+    const other = state.players[i];
+    if (other.hole[0] !== null) out.push(other.hole[0]);
+    if (other.hole[1] !== null) out.push(other.hole[1]);
+  }
+  return out;
+}
+
 function applyPreFlopAdvice(state: GameState): GameState {
-  const players = state.players.map((p) => {
+  const players = state.players.map((p, i) => {
     if (p.hole[0] === null || p.hole[1] === null) return p;
-    const action = preFlopDecision([p.hole[0], p.hole[1]]);
+    const adv = preFlopAdvice([p.hole[0], p.hole[1]], otherHolesOf(state, i));
     return {
       ...p,
-      preFlop: action,
-      play: action === 'bet4x' ? 4 : 0,
+      preFlop: adv.action,
+      preFlopAdv: adv,
+      play: adv.action === 'bet4x' ? 4 : 0,
     };
   });
   return { ...state, players, phase: { kind: 'preflop-advice' } };
@@ -184,13 +225,14 @@ function applyPreFlopAdvice(state: GameState): GameState {
 
 function applyFlopAdvice(state: GameState): GameState {
   const flop = state.board.slice(0, 3) as [Card, Card, Card];
-  const players = state.players.map((p) => {
+  const players = state.players.map((p, i) => {
     if (p.preFlop === 'bet4x' || p.hole[0] === null || p.hole[1] === null) return p;
-    const action = flopDecision([p.hole[0], p.hole[1]], flop);
+    const adv = flopAdvice([p.hole[0], p.hole[1]], flop, otherHolesOf(state, i));
     return {
       ...p,
-      flop: action,
-      play: action === 'bet2x' ? 2 : p.play,
+      flop: adv.action,
+      flopAdv: adv,
+      play: adv.action === 'bet2x' ? 2 : p.play,
     };
   });
   return { ...state, players, phase: { kind: 'flop-advice' } };
@@ -198,21 +240,15 @@ function applyFlopAdvice(state: GameState): GameState {
 
 function applyRiverAdvice(state: GameState): GameState {
   const board = state.board as [Card, Card, Card, Card, Card];
-  const players = state.players.map((p) => {
+  const players = state.players.map((p, i) => {
     if (p.play > 0 || p.hole[0] === null || p.hole[1] === null) return p;
-    // Build otherHoles (the 2 hole cards of every other player) — known to us.
-    const otherHoles: Card[] = [];
-    for (const other of state.players) {
-      if (other === p) continue;
-      if (other.hole[0] !== null) otherHoles.push(other.hole[0]);
-      if (other.hole[1] !== null) otherHoles.push(other.hole[1]);
-    }
-    const action = riverDecision([p.hole[0], p.hole[1]], board, otherHoles);
+    const adv = riverAdvice([p.hole[0], p.hole[1]], board, otherHolesOf(state, i));
     return {
       ...p,
-      river: action,
-      play: action === 'bet1x' ? 1 : 0,
-      folded: action === 'fold',
+      river: adv.action,
+      riverAdv: adv,
+      play: adv.action === 'bet1x' ? 1 : 0,
+      folded: adv.action === 'fold',
     };
   });
   return { ...state, players, phase: { kind: 'river-advice' } };
@@ -230,20 +266,16 @@ function applyShowdown(state: GameState): GameState {
 }
 
 // Manually advance from an advice screen to the next dealing phase.
+//
+// We always walk through every street (flop, turn, river) even when every
+// player has already committed a bet, so the full board can be entered and
+// the showdown can be evaluated against the real cards (e.g. to see whether
+// the dealer ended up winning anyway).
 export function advance(state: GameState): GameState {
   switch (state.phase.kind) {
     case 'preflop-advice':
-      // If every player committed to bet 4x or folded somehow, skip to dealer.
-      // Otherwise proceed to flop.
-      if (state.players.every((p) => p.play > 0)) {
-        return { ...state, phase: { kind: 'dealing-dealer', slot: 0 } };
-      }
       return { ...state, phase: { kind: 'dealing-flop', slot: 0 } };
     case 'flop-advice':
-      // If every player is committed (bet pre-flop OR bet at flop), skip to dealer.
-      if (state.players.every((p) => p.play > 0)) {
-        return { ...state, phase: { kind: 'dealing-dealer', slot: 0 } };
-      }
       return { ...state, phase: { kind: 'dealing-turn' } };
     case 'river-advice':
       return { ...state, phase: { kind: 'dealing-dealer', slot: 0 } };

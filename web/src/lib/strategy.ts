@@ -1,5 +1,16 @@
-// Optimal rule-based strategy for Ultimate Texas Hold'em (UTH-02 base game).
-// Ported from internal/strategy/optimal.go.
+// Strategy for Ultimate Texas Hold'em with EV-aware reporting.
+//
+// Each phase's advice function returns both the recommended action AND the
+// underlying stats (equity + EV under each action + stake committed) so the
+// UI can show why the strategy is choosing what it chose.
+//
+//   Pre-flop:  rule-based decision (matches Wizard published list);
+//              MC stats for display.
+//   Flop:      decision = P(win) > P(lose) from a 1000-trial MC;
+//              stats include EV under bet-2× vs check-and-bet-1× using the
+//              actual paytable (so Blind 3:2 on flush, etc. are weighted).
+//   River:     exact 990-dealer-hand enumeration; bet 1× iff EV(bet) >
+//              EV(fold) = −2 ante.
 
 import type { Card } from './cards';
 import { rankOf, suitOf } from './cards';
@@ -11,150 +22,271 @@ export type PreFlopAction = 'check' | 'bet4x';
 export type FlopAction = 'check' | 'bet2x';
 export type RiverAction = 'fold' | 'bet1x';
 
-// Pre-flop: bet 4× per the Wizard-of-Odds rule set.
-//   - any pair 3+
-//   - any Ace
-//   - K suited (any kicker), K offsuit kicker 5+
-//   - Q suited kicker 6+, Q offsuit kicker 8+
-//   - J suited kicker 8+, JT offsuit
-export function preFlopDecision(hole: [Card, Card]): PreFlopAction {
-  const r1 = rankOf(hole[0]);
-  const r2 = rankOf(hole[1]);
-  const suited = suitOf(hole[0]) === suitOf(hole[1]);
+// Aggregated stats from MC or exact enumeration.
+//
+// Outcome model per (hero vs dealer) sample:
+//   net = anteBlind + play × playSign
+// where:
+//   anteBlind  = ante + blind result (depends on dealer-qualify rule + paytable)
+//   playSign   = +1 on win, −1 on loss, 0 on tie
+//   play       = the Play wager size (4× / 2× / 1× / 0× depending on phase)
+//
+// EV under a play size P is `evNonPlay + P × playSign` (both averaged).
+export interface AdviceStats {
+  win: number;      // P(win)
+  tie: number;      // P(tie)
+  lose: number;     // P(lose)
+  trials: number;   // sample size (or exact-enum count)
+  evNonPlay: number;
+  playSign: number;
+  // Pre-computed convenience values:
+  equity: number;   // P(win) + 0.5·P(tie)
+}
+
+export interface PreFlopAdvice {
+  action: PreFlopAction;
+  stats: AdviceStats;
+  evBet: number;        // EV per hand if bet 4× pre-flop
+  evCheck: number;      // EV per hand if check (approx: bet 1× at river)
+  stakeBet: number;     // total chips committed if bet (ante+blind+play)
+  stakeCheck: number;
+}
+
+export interface FlopAdvice {
+  action: FlopAction;
+  stats: AdviceStats;
+  evBet: number;        // EV per hand if bet 2× at flop
+  evCheck: number;      // EV per hand if check (approx: bet 1× at river)
+  stakeBet: number;
+  stakeCheck: number;
+}
+
+export interface RiverAdvice {
+  action: RiverAction;
+  stats: AdviceStats;
+  evBet: number;        // EV per hand if bet 1× at river
+  evFold: number;       // always −2 ante (sunk ante + blind)
+  stakeBet: number;
+  stakeFold: number;
+}
+
+// ---------- decision helpers (existing rule for pre-flop) ----------
+
+function shouldBet4xPreFlop(h: [Card, Card]): boolean {
+  const r1 = rankOf(h[0]);
+  const r2 = rankOf(h[1]);
+  const suited = suitOf(h[0]) === suitOf(h[1]);
   const high = Math.max(r1, r2);
   const low = Math.min(r1, r2);
-
-  if (r1 === r2) return r1 >= 1 ? 'bet4x' : 'check'; // pair of 3s+ (rank 1 = 3)
-  if (high === 12) return 'bet4x'; // any A
-  if (high === 11) {
-    // King
-    if (suited) return 'bet4x';
-    return low >= 3 ? 'bet4x' : 'check'; // K5o+ (5 = rank 3)
-  }
-  if (high === 10) {
-    // Queen
-    if (suited) return low >= 4 ? 'bet4x' : 'check'; // Q6s+
-    return low >= 6 ? 'bet4x' : 'check'; // Q8o+
-  }
-  if (high === 9) {
-    // Jack
-    if (suited) return low >= 6 ? 'bet4x' : 'check'; // J8s+
-    return low === 8 ? 'bet4x' : 'check'; // JTo only
-  }
-  return 'check';
+  if (r1 === r2) return r1 >= 1; // pair 3s+
+  if (high === 12) return true;
+  if (high === 11) return suited ? true : low >= 3;
+  if (high === 10) return suited ? low >= 4 : low >= 6;
+  if (high === 9) return suited ? low >= 6 : low === 8;
+  return false;
 }
 
-// Flop: bet 2× per the rule set used in the Go `optimal` strategy.
-//   - trips+ → bet
-//   - hidden pair (pocket pair) → bet
-//   - top or middle pair using a hole card → bet
-//   - 4-flush with hero T+ in the flush suit → bet
-//   - otherwise check
-export function flopDecision(
-  hole: [Card, Card],
-  flop: [Card, Card, Card]
-): FlopAction {
-  const holeRanks = [rankOf(hole[0]), rankOf(hole[1])];
-  const holeSuits = [suitOf(hole[0]), suitOf(hole[1])];
-  const boardRanks = [rankOf(flop[0]), rankOf(flop[1]), rankOf(flop[2])];
-  const boardSuits = [suitOf(flop[0]), suitOf(flop[1]), suitOf(flop[2])];
+// ---------- shared accumulator ----------
 
-  const rankCount: number[] = new Array(13).fill(0);
-  rankCount[holeRanks[0]]++;
-  rankCount[holeRanks[1]]++;
-  for (const r of boardRanks) rankCount[r]++;
-
-  // Trips or better.
-  for (const n of rankCount) if (n >= 3) return 'bet2x';
-
-  // Hidden pair (pocket pair).
-  if (holeRanks[0] === holeRanks[1]) return 'bet2x';
-
-  // Pair using a hole card, unless bottom pair on the flop.
-  for (const hr of holeRanks) {
-    if (rankCount[hr] >= 2) {
-      let higher = 0;
-      for (const br of boardRanks) {
-        if (br !== hr && br > hr) higher++;
-      }
-      if (higher <= 1) return 'bet2x'; // top or middle pair
-    }
-  }
-
-  // 4-flush draw with a hero card of T+ in the flush suit.
-  const suitCount = [0, 0, 0, 0];
-  suitCount[holeSuits[0]]++;
-  suitCount[holeSuits[1]]++;
-  for (const s of boardSuits) suitCount[s]++;
-  for (let s = 0; s < 4; s++) {
-    if (suitCount[s] !== 4) continue;
-    let heroHigh = -1;
-    for (let i = 0; i < 2; i++) {
-      if (holeSuits[i] === s && holeRanks[i] > heroHigh) {
-        heroHigh = holeRanks[i];
-      }
-    }
-    if (heroHigh >= 8) return 'bet2x'; // rank 8 = T
-  }
-
-  return 'check';
+interface Accum {
+  wins: number;
+  ties: number;
+  losses: number;
+  sumNonPlay: number;
+  sumPlaySign: number;
 }
 
-// River: exact EV-maximization. Enumerate every possible dealer hole-card pair
-// from the unseen cards (52 minus hero's hole, board, and any other known
-// hole cards). Bet 1× iff EV(bet) > EV(fold) = −2 ante.
-export function riverDecision(
-  hole: [Card, Card],
-  board: [Card, Card, Card, Card, Card],
-  otherHoles: Card[] = []
-): RiverAction {
+// Increment the accumulator from a single hero-vs-dealer showdown.
+function record(
+  hhv: number,
+  dhv: number,
+  heroCat: Category,
+  dealerCat: Category,
+  acc: Accum
+): void {
+  const dealerQual = dealerCat >= Cat.OnePair;
+  if (hhv > dhv) {
+    acc.wins++;
+    const ante = dealerQual ? 1 : 0;
+    let blind = 0;
+    if (heroCat >= Cat.Straight) {
+      const r = blindRatio(heroCat);
+      blind = r.num / r.den;
+    }
+    acc.sumNonPlay += ante + blind;
+    acc.sumPlaySign += 1;
+  } else if (hhv < dhv) {
+    acc.losses++;
+    const ante = dealerQual ? -1 : 0;
+    acc.sumNonPlay += ante - 1; // -1 for blind loss
+    acc.sumPlaySign -= 1;
+  } else {
+    acc.ties++;
+  }
+}
+
+function buildPool(hole: [Card, Card], visibleBoard: Card[], otherHoles: Card[]): Card[] {
   const inDeck = new Array(52).fill(true);
   inDeck[hole[0]] = false;
   inDeck[hole[1]] = false;
-  for (const c of board) inDeck[c] = false;
+  for (const c of visibleBoard) inDeck[c] = false;
   for (const c of otherHoles) inDeck[c] = false;
-
   const pool: Card[] = [];
   for (let i = 0; i < 52; i++) if (inDeck[i]) pool.push(i);
+  return pool;
+}
 
-  const hero7 = [hole[0], hole[1], board[0], board[1], board[2], board[3], board[4]];
-  const heroHV = evaluate7(hero7);
-  const heroCat = categoryOf(heroHV);
-  const blindR = blindRatio(heroCat);
-  const blindMult = blindR.num;
-  const blindDen = blindR.den || 1;
+function finalize(acc: Accum, trials: number): AdviceStats {
+  const win = acc.wins / trials;
+  const tie = acc.ties / trials;
+  const lose = acc.losses / trials;
+  return {
+    win,
+    tie,
+    lose,
+    trials,
+    evNonPlay: acc.sumNonPlay / trials,
+    playSign: acc.sumPlaySign / trials,
+    equity: win + 0.5 * tie,
+  };
+}
 
-  const dealer7 = [0, 0, board[0], board[1], board[2], board[3], board[4]];
+// ---------- Monte Carlo for pre-flop and flop ----------
 
-  let sumBet = 0;
+function mcSample(
+  hole: [Card, Card],
+  visibleBoard: Card[],
+  otherHoles: Card[],
+  trials: number
+): AdviceStats {
+  const pool = buildPool(hole, visibleBoard, otherHoles);
+  const needBoard = 5 - visibleBoard.length;
+  const needed = 2 + needBoard;
+
+  const hero7: number[] = [hole[0], hole[1], 0, 0, 0, 0, 0];
+  const dealer7: number[] = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < visibleBoard.length; i++) {
+    hero7[2 + i] = visibleBoard[i];
+    dealer7[2 + i] = visibleBoard[i];
+  }
+
+  const acc: Accum = { wins: 0, ties: 0, losses: 0, sumNonPlay: 0, sumPlaySign: 0 };
+
+  for (let t = 0; t < trials; t++) {
+    // Partial Fisher-Yates over pool: take first `needed` cards.
+    for (let i = 0; i < needed; i++) {
+      const j = i + Math.floor(Math.random() * (pool.length - i));
+      const tmp = pool[i];
+      pool[i] = pool[j];
+      pool[j] = tmp;
+    }
+    dealer7[0] = pool[0];
+    dealer7[1] = pool[1];
+    for (let i = 0; i < needBoard; i++) {
+      hero7[2 + visibleBoard.length + i] = pool[2 + i];
+      dealer7[2 + visibleBoard.length + i] = pool[2 + i];
+    }
+    const hhv = evaluate7(hero7);
+    const dhv = evaluate7(dealer7);
+    record(hhv, dhv, categoryOf(hhv), categoryOf(dhv), acc);
+  }
+  return finalize(acc, trials);
+}
+
+// ---------- Exact enumeration for river ----------
+
+function exactRiver(
+  hole: [Card, Card],
+  board: [Card, Card, Card, Card, Card],
+  otherHoles: Card[]
+): AdviceStats {
+  const pool = buildPool(hole, board, otherHoles);
+
+  const hero7: number[] = [hole[0], hole[1], board[0], board[1], board[2], board[3], board[4]];
+  const dealer7: number[] = [0, 0, board[0], board[1], board[2], board[3], board[4]];
+  const hhv = evaluate7(hero7);
+  const heroCat = categoryOf(hhv);
+
+  const acc: Accum = { wins: 0, ties: 0, losses: 0, sumNonPlay: 0, sumPlaySign: 0 };
   let combos = 0;
   for (let i = 0; i < pool.length; i++) {
     for (let j = i + 1; j < pool.length; j++) {
       dealer7[0] = pool[i];
       dealer7[1] = pool[j];
-      const dealerHV = evaluate7(dealer7);
-      const dealerCat = categoryOf(dealerHV);
-      const dealerQual = dealerCat >= Cat.OnePair;
-      let net = 0;
-      if (heroHV > dealerHV) {
-        if (dealerQual) net += blindDen;
-        net += blindDen;
-        net += blindMult;
-      } else if (heroHV < dealerHV) {
-        if (dealerQual) net -= blindDen;
-        net -= blindDen;
-        net -= blindDen;
-      }
-      sumBet += net;
+      const dhv = evaluate7(dealer7);
+      record(hhv, dhv, heroCat, categoryOf(dhv), acc);
       combos++;
     }
   }
-  const sumFold = -2 * blindDen * combos;
-  return sumBet > sumFold ? 'bet1x' : 'fold';
+  return finalize(acc, combos);
 }
 
-// Showdown settlement using the same rules as the Go runner. AnteUnit = 1
-// (so blind flush payouts of 3:2 become 1.5 — we use floats here).
+// ---------- phase-specific advice ----------
+
+const PREFLOP_TRIALS = 2000;
+const FLOP_TRIALS = 1000;
+
+export function preFlopAdvice(
+  hole: [Card, Card],
+  otherHoles: Card[] = []
+): PreFlopAdvice {
+  const stats = mcSample(hole, [], otherHoles, PREFLOP_TRIALS);
+  const action: PreFlopAction = shouldBet4xPreFlop(hole) ? 'bet4x' : 'check';
+  const evBet = stats.evNonPlay + 4 * stats.playSign;
+  const evCheck = stats.evNonPlay + 1 * stats.playSign;
+  return {
+    action,
+    stats,
+    evBet,
+    evCheck,
+    stakeBet: 6, // ante + blind + 4× play
+    stakeCheck: 3, // ante + blind + 1× play (assuming bet at river)
+  };
+}
+
+export function flopAdvice(
+  hole: [Card, Card],
+  flop: [Card, Card, Card],
+  otherHoles: Card[] = []
+): FlopAdvice {
+  const stats = mcSample(hole, [flop[0], flop[1], flop[2]], otherHoles, FLOP_TRIALS);
+  // Decision: bet 2× iff EV(bet 2×) > EV(check + bet 1× at river). The non-
+  // play parts cancel, so this is equivalent to playSign > 0 (i.e. P(win) >
+  // P(lose)). We use the EV diff directly to be explicit.
+  const evBet = stats.evNonPlay + 2 * stats.playSign;
+  const evCheck = stats.evNonPlay + 1 * stats.playSign;
+  const action: FlopAction = evBet > evCheck ? 'bet2x' : 'check';
+  return {
+    action,
+    stats,
+    evBet,
+    evCheck,
+    stakeBet: 4, // ante + blind + 2× play
+    stakeCheck: 3, // ante + blind + 1× play
+  };
+}
+
+export function riverAdvice(
+  hole: [Card, Card],
+  board: [Card, Card, Card, Card, Card],
+  otherHoles: Card[] = []
+): RiverAdvice {
+  const stats = exactRiver(hole, board, otherHoles);
+  const evBet = stats.evNonPlay + 1 * stats.playSign;
+  const evFold = -2;
+  const action: RiverAction = evBet > evFold ? 'bet1x' : 'fold';
+  return {
+    action,
+    stats,
+    evBet,
+    evFold,
+    stakeBet: 3, // ante + blind + 1× play
+    stakeFold: 2, // ante + blind (lost)
+  };
+}
+
+// ---------- showdown settlement (unchanged) ----------
+
 export interface SettleResult {
   anteNet: number;
   blindNet: number;
@@ -170,7 +302,7 @@ export function settle(
   hole: [Card, Card],
   board: [Card, Card, Card, Card, Card],
   dealer: [Card, Card],
-  play: number, // 0, 1, 2, 3, or 4 (× ante)
+  play: number,
   folded: boolean
 ): SettleResult {
   const ante = 1;
