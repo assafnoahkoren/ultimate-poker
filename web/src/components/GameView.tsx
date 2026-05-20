@@ -10,8 +10,7 @@ import {
   startGame,
 } from '../lib/state';
 import { CardChip } from './CardChip';
-import { PaytablePanel } from './PaytablePanel';
-import { BonusPanel } from './BonusPanel';
+import { PaytablesPanel } from './PaytablesPanel';
 import type { TripsPaytable } from '../lib/trips';
 import type { BonusPaytable } from '../lib/bonus';
 import type {
@@ -130,10 +129,9 @@ export function GameView({ state, setState, paytable, bonusPaytable, onEditPayta
               </div>
             </div>
 
-            {/* Trips + Bonus paytables */}
-            <div className="w-28 shrink-0 space-y-2">
-              <PaytablePanel paytable={paytable} />
-              <BonusPanel paytable={bonusPaytable} />
+            {/* Combined Trips + Bonus paytables (compact, single panel) */}
+            <div className="w-32 shrink-0">
+              <PaytablesPanel trips={paytable} bonus={bonusPaytable} />
             </div>
           </div>
 
