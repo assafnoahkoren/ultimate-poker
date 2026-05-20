@@ -265,6 +265,66 @@ function applyShowdown(state: GameState): GameState {
   return { ...state, players, phase: { kind: 'showdown' } };
 }
 
+// Per-player action overrides — let the user pick a non-optimal action.
+// Each setter is a no-op outside its respective advice phase, and the
+// downstream advice (flop, river) is recomputed normally when the user
+// continues, so changing pre-flop from "bet 4×" to "check" properly triggers
+// a flop decision for that player on the next advance.
+
+export function setPreFlopAction(
+  state: GameState,
+  playerIdx: number,
+  action: PreFlopAction
+): GameState {
+  if (state.phase.kind !== 'preflop-advice') return state;
+  const players = state.players.map((p, i) => {
+    if (i !== playerIdx) return p;
+    return {
+      ...p,
+      preFlop: action,
+      play: action === 'bet4x' ? 4 : 0,
+    };
+  });
+  return { ...state, players };
+}
+
+export function setFlopAction(
+  state: GameState,
+  playerIdx: number,
+  action: FlopAction
+): GameState {
+  if (state.phase.kind !== 'flop-advice') return state;
+  const players = state.players.map((p, i) => {
+    if (i !== playerIdx) return p;
+    if (!p.flopAdv) return p; // not eligible (already bet pre-flop)
+    return {
+      ...p,
+      flop: action,
+      play: action === 'bet2x' ? 2 : 0,
+    };
+  });
+  return { ...state, players };
+}
+
+export function setRiverAction(
+  state: GameState,
+  playerIdx: number,
+  action: RiverAction
+): GameState {
+  if (state.phase.kind !== 'river-advice') return state;
+  const players = state.players.map((p, i) => {
+    if (i !== playerIdx) return p;
+    if (!p.riverAdv) return p; // not eligible (already bet)
+    return {
+      ...p,
+      river: action,
+      play: action === 'bet1x' ? 1 : 0,
+      folded: action === 'fold',
+    };
+  });
+  return { ...state, players };
+}
+
 // Manually advance from an advice screen to the next dealing phase.
 //
 // We always walk through every street (flop, turn, river) even when every

@@ -1,6 +1,14 @@
+import type React from 'react';
 import { CATEGORY_LABELS } from '../lib/eval';
 import type { GameState, PlayerState } from '../lib/state';
-import { pickPrompt, reset, startGame } from '../lib/state';
+import {
+  pickPrompt,
+  reset,
+  setFlopAction,
+  setPreFlopAction,
+  setRiverAction,
+  startGame,
+} from '../lib/state';
 import { CardChip } from './CardChip';
 import { PaytablePanel } from './PaytablePanel';
 import type { TripsPaytable } from '../lib/trips';
@@ -184,6 +192,13 @@ export function GameView({ state, setState, paytable, onEditPaytable, scaledByPl
                   )}
                 </div>
                 {!isShowdown && <AdviceStats player={p} phase={state.phase.kind} />}
+                {!isShowdown && (
+                  <ActionButtons
+                    state={state}
+                    setState={setState}
+                    playerIdx={i}
+                  />
+                )}
               </div>
             );
           })}
@@ -321,6 +336,132 @@ function AdviceStats({
         )}
       </div>
     </div>
+  );
+}
+
+function ActionButtons({
+  state,
+  setState,
+  playerIdx,
+}: {
+  state: GameState;
+  setState: (s: GameState) => void;
+  playerIdx: number;
+}) {
+  const p = state.players[playerIdx];
+  if (!p) return null;
+  const phase = state.phase.kind;
+
+  if (phase === 'preflop-advice' && p.preFlopAdv) {
+    const opt = p.preFlopAdv.action;
+    const sel = p.preFlop;
+    return (
+      <ButtonRow>
+        <ChoiceButton
+          label="CHECK"
+          selected={sel === 'check'}
+          optimal={opt === 'check'}
+          selectedClass="bg-amber-400 text-black"
+          onClick={() => setState(setPreFlopAction(state, playerIdx, 'check'))}
+        />
+        <ChoiceButton
+          label="BET 4×"
+          selected={sel === 'bet4x'}
+          optimal={opt === 'bet4x'}
+          selectedClass="bg-emerald-500 text-white"
+          onClick={() => setState(setPreFlopAction(state, playerIdx, 'bet4x'))}
+        />
+      </ButtonRow>
+    );
+  }
+
+  if (phase === 'flop-advice' && p.flopAdv) {
+    const opt = p.flopAdv.action;
+    const sel = p.flop;
+    return (
+      <ButtonRow>
+        <ChoiceButton
+          label="CHECK"
+          selected={sel === 'check'}
+          optimal={opt === 'check'}
+          selectedClass="bg-amber-400 text-black"
+          onClick={() => setState(setFlopAction(state, playerIdx, 'check'))}
+        />
+        <ChoiceButton
+          label="BET 2×"
+          selected={sel === 'bet2x'}
+          optimal={opt === 'bet2x'}
+          selectedClass="bg-emerald-500 text-white"
+          onClick={() => setState(setFlopAction(state, playerIdx, 'bet2x'))}
+        />
+      </ButtonRow>
+    );
+  }
+
+  if (phase === 'river-advice' && p.riverAdv) {
+    const opt = p.riverAdv.action;
+    const sel = p.river;
+    return (
+      <ButtonRow>
+        <ChoiceButton
+          label="FOLD"
+          selected={sel === 'fold'}
+          optimal={opt === 'fold'}
+          selectedClass="bg-rose-500 text-white"
+          onClick={() => setState(setRiverAction(state, playerIdx, 'fold'))}
+        />
+        <ChoiceButton
+          label="BET 1×"
+          selected={sel === 'bet1x'}
+          optimal={opt === 'bet1x'}
+          selectedClass="bg-emerald-500 text-white"
+          onClick={() => setState(setRiverAction(state, playerIdx, 'bet1x'))}
+        />
+      </ButtonRow>
+    );
+  }
+  return null;
+}
+
+function ButtonRow({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-2 gap-2 mt-2">{children}</div>;
+}
+
+function ChoiceButton({
+  label,
+  selected,
+  optimal,
+  selectedClass,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  optimal: boolean;
+  selectedClass: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative py-2 rounded font-extrabold text-xs flex items-center justify-center gap-1 transition-colors ${
+        selected
+          ? `${selectedClass} shadow`
+          : 'bg-white/10 text-white/70 active:bg-white/20'
+      }`}
+    >
+      <span>{label}</span>
+      {optimal && (
+        <span
+          className={`text-[10px] leading-none ${
+            selected ? 'opacity-80' : 'text-yellow-300'
+          }`}
+          aria-label="optimal"
+          title="strategy's recommended action"
+        >
+          ★
+        </span>
+      )}
+    </button>
   );
 }
 
