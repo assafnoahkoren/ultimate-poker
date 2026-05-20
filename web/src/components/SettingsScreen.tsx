@@ -133,7 +133,7 @@ export function SettingsScreen({
                     />
                   </div>
                   <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
-                    {prob.toFixed(6)}
+                    {(prob * 100).toFixed(4)}%
                   </div>
                   <div className="px-2 py-1.5 text-right tabular-nums">
                     {r >= 0 ? '+' : ''}
@@ -150,7 +150,7 @@ export function SettingsScreen({
               </div>
               <div className="px-2 py-1.5 text-right text-white/60">−1</div>
               <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
-                {probabilityOf('allOther').toFixed(6)}
+                {(probabilityOf('allOther') * 100).toFixed(4)}%
               </div>
               <div className="px-2 py-1.5 text-right text-rose-300 tabular-nums">
                 −{(TRIPS_COMBOS.allOther / TRIPS_TOTAL_COMBOS).toFixed(5)}
