@@ -11,7 +11,9 @@ import {
 } from '../lib/state';
 import { CardChip } from './CardChip';
 import { PaytablePanel } from './PaytablePanel';
+import { BonusPanel } from './BonusPanel';
 import type { TripsPaytable } from '../lib/trips';
+import type { BonusPaytable } from '../lib/bonus';
 import type {
   FlopAction,
   PreFlopAction,
@@ -24,6 +26,7 @@ interface Props {
   state: GameState;
   setState: (s: GameState) => void;
   paytable: TripsPaytable;
+  bonusPaytable: BonusPaytable;
   onEditPaytable: () => void;
   scaledByPlayer?: (ScaledOutcome | null)[] | null;
 }
@@ -46,7 +49,7 @@ const actionLabel = (
   }
 };
 
-export function GameView({ state, setState, paytable, onEditPaytable, scaledByPlayer }: Props) {
+export function GameView({ state, setState, paytable, bonusPaytable, onEditPaytable, scaledByPlayer }: Props) {
   const isSetup = state.phase.kind === 'setup';
   const isShowdown = state.phase.kind === 'showdown';
 
@@ -127,9 +130,10 @@ export function GameView({ state, setState, paytable, onEditPaytable, scaledByPl
               </div>
             </div>
 
-            {/* Trips paytable */}
-            <div className="w-28 shrink-0">
+            {/* Trips + Bonus paytables */}
+            <div className="w-28 shrink-0 space-y-2">
               <PaytablePanel paytable={paytable} />
+              <BonusPanel paytable={bonusPaytable} />
             </div>
           </div>
 

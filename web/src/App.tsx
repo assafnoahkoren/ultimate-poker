@@ -95,6 +95,7 @@ export default function App() {
           state={state}
           setState={setState}
           paytable={paytable}
+          bonusPaytable={bonusPaytable}
           onEditPaytable={() => setEditingSettings(true)}
           scaledByPlayer={scaledByPlayer}
         />
