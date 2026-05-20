@@ -1,0 +1,46 @@
+import type { Card } from '../lib/cards';
+import { RANK_LABELS, SUIT_SYMBOLS, isRedSuit, makeCard } from '../lib/cards';
+
+interface Props {
+  picked: Set<Card>;
+  onPick: (c: Card) => void;
+  disabled?: boolean;
+}
+
+// 4 rows of 13 cards. Suits ordered ♠ ♥ ♦ ♣ for visual readability.
+const SUIT_ORDER = [3, 2, 1, 0];
+
+export function CardPicker({ picked, onPick, disabled }: Props) {
+  return (
+    <div className="grid grid-cols-13 gap-[2px] p-1 bg-feltDark/60 rounded-lg">
+      {SUIT_ORDER.map((suit) =>
+        RANK_LABELS.map((_, rank) => {
+          const card = makeCard(rank, suit);
+          const isPicked = picked.has(card);
+          const red = isRedSuit(suit);
+          return (
+            <button
+              key={card}
+              disabled={isPicked || disabled}
+              onClick={() => onPick(card)}
+              className={`
+                aspect-[2/3] rounded-[3px] text-[10px] leading-tight font-bold
+                flex flex-col items-center justify-center
+                ${isPicked
+                  ? 'bg-feltDark/80 text-feltDark/30 line-through'
+                  : 'bg-white hover:bg-yellow-100 active:bg-yellow-300'}
+                ${red && !isPicked ? 'text-red-600' : ''}
+                ${!red && !isPicked ? 'text-black' : ''}
+                ${disabled ? 'opacity-40' : ''}
+                transition-colors
+              `}
+            >
+              <div>{RANK_LABELS[rank]}</div>
+              <div className="text-[11px]">{SUIT_SYMBOLS[suit]}</div>
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+}
