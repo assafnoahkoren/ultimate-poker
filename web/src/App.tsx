@@ -3,19 +3,27 @@ import { GameView } from './components/GameView';
 import { CardPicker } from './components/CardPicker';
 import { ActionBar } from './components/ActionBar';
 import { SettingsScreen } from './components/SettingsScreen';
+import { BetRow } from './components/BetRow';
 import type { GameState } from './lib/state';
 import { initialState, pickCard } from './lib/state';
 import type { TripsPaytable } from './lib/trips';
 import { loadTripsPaytable, saveTripsPaytable } from './lib/trips';
+import type { BetSettings } from './lib/bets';
+import { loadBets, saveBets } from './lib/bets';
 
 export default function App() {
   const [state, setState] = useState<GameState>(initialState);
   const [paytable, setPaytable] = useState<TripsPaytable>(() => loadTripsPaytable());
-  const [editingPaytable, setEditingPaytable] = useState(false);
+  const [bets, setBets] = useState<BetSettings>(() => loadBets());
+  const [editingSettings, setEditingSettings] = useState(false);
 
   useEffect(() => {
     saveTripsPaytable(paytable);
   }, [paytable]);
+
+  useEffect(() => {
+    saveBets(bets);
+  }, [bets]);
 
   const pickerDisabled =
     state.phase.kind === 'setup' ||
@@ -31,9 +39,11 @@ export default function App() {
           state={state}
           setState={setState}
           paytable={paytable}
-          onEditPaytable={() => setEditingPaytable(true)}
+          onEditPaytable={() => setEditingSettings(true)}
         />
       </div>
+
+      <BetRow bets={bets} />
 
       <div className="border-t-2 border-white/10 bg-felt p-1">
         <CardPicker
@@ -45,11 +55,13 @@ export default function App() {
 
       <ActionBar state={state} setState={setState} />
 
-      {editingPaytable && (
+      {editingSettings && (
         <SettingsScreen
           paytable={paytable}
           setPaytable={setPaytable}
-          onClose={() => setEditingPaytable(false)}
+          bets={bets}
+          setBets={setBets}
+          onClose={() => setEditingSettings(false)}
         />
       )}
     </div>
