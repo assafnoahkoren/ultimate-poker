@@ -27,17 +27,17 @@ function payoutColor(p: number): string {
 }
 
 export function BetRow({ bets, play, payouts }: Props) {
-  const cells: Array<{ key: keyof BetPayouts; label: string; value: number }> = [
+  const cells: Array<{ key: keyof BetPayouts; label: string; value: number; isPlay?: boolean }> = [
     { key: 'bet', label: 'Bet', value: bets.bet },
     { key: 'ante', label: 'Ante', value: bets.ante },
-    { key: 'play', label: 'Play', value: play },
+    { key: 'play', label: 'Play', value: play, isPlay: true },
     { key: 'trips', label: 'Trips', value: bets.trips },
     { key: 'bonus', label: 'Bonus', value: bets.bonus },
   ];
 
   return (
     <div className="grid grid-cols-5 gap-1 px-1 py-1 bg-feltDark/60 border-t border-white/10">
-      {cells.map(({ key, label, value }) => {
+      {cells.map(({ key, label, value, isPlay }) => {
         const dim = value === 0 && !payouts;
         const payout = payouts ? payouts[key] : undefined;
         return (
@@ -61,6 +61,9 @@ export function BetRow({ bets, play, payouts }: Props) {
             </div>
             <div className="text-lg font-extrabold leading-tight tabular-nums">
               {value}
+              {isPlay && value > 0 && (
+                <span className="text-sm font-bold text-white/70">×</span>
+              )}
             </div>
           </div>
         );

@@ -10,12 +10,14 @@ import type {
   RiverAction,
   SettleResult,
 } from '../lib/strategy';
+import type { ScaledOutcome } from '../lib/scaledOutcome';
 
 interface Props {
   state: GameState;
   setState: (s: GameState) => void;
   paytable: TripsPaytable;
   onEditPaytable: () => void;
+  scaledByPlayer?: (ScaledOutcome | null)[] | null;
 }
 
 const actionLabel = (
@@ -36,7 +38,7 @@ const actionLabel = (
   }
 };
 
-export function GameView({ state, setState, paytable, onEditPaytable }: Props) {
+export function GameView({ state, setState, paytable, onEditPaytable, scaledByPlayer }: Props) {
   const isSetup = state.phase.kind === 'setup';
   const isShowdown = state.phase.kind === 'showdown';
 
@@ -175,7 +177,10 @@ export function GameView({ state, setState, paytable, onEditPaytable }: Props) {
                   )}
                   {p.folded && <div className="text-[11px] text-rose-300">folded</div>}
                   {isShowdown && p.result && (
-                    <PlayerResult result={p.result} />
+                    <PlayerResult
+                      result={p.result}
+                      scaled={scaledByPlayer?.[i] ?? null}
+                    />
                   )}
                 </div>
                 {!isShowdown && <AdviceStats player={p} phase={state.phase.kind} />}
@@ -348,12 +353,19 @@ function SetupView({
   );
 }
 
-function PlayerResult({ result }: { result: NonNullable<SettleResult> }) {
-  const sign = result.totalNet > 0 ? '+' : '';
+function PlayerResult({
+  result,
+  scaled,
+}: {
+  result: NonNullable<SettleResult>;
+  scaled: ScaledOutcome | null;
+}) {
+  const total = scaled?.total ?? result.totalNet;
+  const sign = total > 0 ? '+' : '';
   const color =
-    result.totalNet > 0
+    total > 0
       ? 'text-emerald-300'
-      : result.totalNet < 0
+      : total < 0
       ? 'text-rose-300'
       : 'text-white/70';
   return (
@@ -361,9 +373,9 @@ function PlayerResult({ result }: { result: NonNullable<SettleResult> }) {
       <div className="text-[11px] text-white/70">
         {result.folded ? 'folded' : CATEGORY_LABELS[result.heroCat]}
       </div>
-      <div className={`text-sm font-bold ${color}`}>
+      <div className={`text-sm font-bold ${color} tabular-nums`}>
         {sign}
-        {result.totalNet.toFixed(1)}
+        {Number.isInteger(total) ? total : total.toFixed(1)}
       </div>
     </div>
   );

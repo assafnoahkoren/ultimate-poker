@@ -11,6 +11,8 @@ import type { TripsPaytable } from './lib/trips';
 import { loadTripsPaytable, saveTripsPaytable } from './lib/trips';
 import type { BetSettings } from './lib/bets';
 import { loadBets, saveBets } from './lib/bets';
+import type { ScaledOutcome } from './lib/scaledOutcome';
+import { scaleOutcome } from './lib/scaledOutcome';
 
 export default function App() {
   const [state, setState] = useState<GameState>(initialState);
@@ -26,29 +28,33 @@ export default function App() {
     saveBets(bets);
   }, [bets]);
 
-  // Current Play wager (chip amount), summed across all players. p.play is
-  // the multiplier already applied (4 / 2 / 1 / 0); the underlying game logic
-  // uses ante = 1, so this is the live chip total wagered on Play across the
-  // table.
-  const play = useMemo(
-    () => state.players.reduce((sum, p) => sum + p.play, 0),
-    [state]
-  );
+  // Player 1's Play multiplier (4 / 2 / 1 / 0) — the bet row reflects one
+  // player's perspective; other players' wagers and outcomes live in their
+  // individual rows below. The × suffix in the Play box marks this as the
+  // multiplier of the Ante, not a chip count.
+  const play = state.players[0]?.play ?? 0;
 
-  // At showdown, aggregate every player's settled outcome into the 5-bet row.
-  // "Bet" maps to the Blind wager; Trips and Bonus aren't wired into game
-  // logic yet, so their payouts stay at 0.
-  const payouts: BetPayouts | null = useMemo(() => {
+  // Per-player scaled outcomes — scales the ante=1 settlement results by the
+  // user's bet sizes and computes Trips from the paytable.
+  const scaledByPlayer = useMemo<(ScaledOutcome | null)[] | null>(() => {
     if (state.phase.kind !== 'showdown') return null;
-    const totals: BetPayouts = { bet: 0, ante: 0, play: 0, trips: 0, bonus: 0 };
-    for (const p of state.players) {
-      if (!p.result) continue;
-      totals.ante += p.result.anteNet;
-      totals.bet += p.result.blindNet;
-      totals.play += p.result.playNet;
-    }
-    return totals;
-  }, [state]);
+    return state.players.map((p) =>
+      p.result ? scaleOutcome(p.result, bets, paytable) : null
+    );
+  }, [state, bets, paytable]);
+
+  // At showdown, surface Player 1's scaled outcome above each bet.
+  const payouts: BetPayouts | null = useMemo(() => {
+    const s = scaledByPlayer?.[0];
+    if (!s) return null;
+    return {
+      bet: s.bet,
+      ante: s.ante,
+      play: s.play,
+      trips: s.trips,
+      bonus: s.bonus,
+    };
+  }, [scaledByPlayer]);
 
   const pickerDisabled =
     state.phase.kind === 'setup' ||
@@ -65,6 +71,7 @@ export default function App() {
           setState={setState}
           paytable={paytable}
           onEditPaytable={() => setEditingSettings(true)}
+          scaledByPlayer={scaledByPlayer}
         />
       </div>
 
