@@ -26,6 +26,22 @@ export function isRedSuit(suit: Suit): boolean {
   return suit === 1 || suit === 2; // diamonds, hearts
 }
 
+// Four-color deck: spades black, hearts red, diamonds blue, clubs green.
+// Tailwind classes are listed as full literals so the content scanner keeps them.
+export function suitColorClass(suit: Suit): string {
+  switch (suit) {
+    case 0:
+      return 'text-green-700'; // ♣ clubs
+    case 1:
+      return 'text-blue-600'; // ♦ diamonds
+    case 2:
+      return 'text-red-600'; // ♥ hearts
+    case 3:
+      return 'text-black'; // ♠ spades
+  }
+  return 'text-black';
+}
+
 export function cardLabel(c: Card): string {
   return RANK_LABELS[rankOf(c)] + SUIT_SYMBOLS[suitOf(c)];
 }

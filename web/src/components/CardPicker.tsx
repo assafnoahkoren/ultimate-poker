@@ -1,5 +1,5 @@
 import type { Card } from '../lib/cards';
-import { RANK_LABELS, SUIT_SYMBOLS, isRedSuit, makeCard } from '../lib/cards';
+import { RANK_LABELS, SUIT_SYMBOLS, makeCard, suitColorClass } from '../lib/cards';
 
 interface Props {
   picked: Set<Card>;
@@ -17,26 +17,25 @@ export function CardPicker({ picked, onPick, disabled }: Props) {
         RANK_LABELS.map((_, rank) => {
           const card = makeCard(rank, suit);
           const isPicked = picked.has(card);
-          const red = isRedSuit(suit);
+          const colorClass = isPicked ? 'text-feltDark/30' : suitColorClass(suit);
           return (
             <button
               key={card}
               disabled={isPicked || disabled}
               onClick={() => onPick(card)}
               className={`
-                aspect-[2/3] rounded-[3px] text-[10px] leading-tight font-bold
-                flex flex-col items-center justify-center
+                h-14 rounded text-base leading-none font-extrabold
+                flex flex-col items-center justify-center gap-[1px]
                 ${isPicked
-                  ? 'bg-feltDark/80 text-feltDark/30 line-through'
-                  : 'bg-white hover:bg-yellow-100 active:bg-yellow-300'}
-                ${red && !isPicked ? 'text-red-600' : ''}
-                ${!red && !isPicked ? 'text-black' : ''}
+                  ? 'bg-feltDark/80 line-through'
+                  : 'bg-white active:bg-yellow-300'}
+                ${colorClass}
                 ${disabled ? 'opacity-40' : ''}
                 transition-colors
               `}
             >
-              <div>{RANK_LABELS[rank]}</div>
-              <div className="text-[11px]">{SUIT_SYMBOLS[suit]}</div>
+              <div className="text-[15px] leading-none">{RANK_LABELS[rank]}</div>
+              <div className="text-[17px] leading-none">{SUIT_SYMBOLS[suit]}</div>
             </button>
           );
         })

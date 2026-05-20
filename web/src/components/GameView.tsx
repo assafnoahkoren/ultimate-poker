@@ -1,6 +1,6 @@
 import { CATEGORY_LABELS } from '../lib/eval';
 import type { GameState } from '../lib/state';
-import { advance, pickPrompt, reset, startGame } from '../lib/state';
+import { pickPrompt, reset, startGame } from '../lib/state';
 import { CardChip } from './CardChip';
 import type { FlopAction, PreFlopAction, RiverAction } from '../lib/strategy';
 
@@ -29,10 +29,6 @@ const actionLabel = (
 
 export function GameView({ state, setState }: Props) {
   const isSetup = state.phase.kind === 'setup';
-  const isAdvice =
-    state.phase.kind === 'preflop-advice' ||
-    state.phase.kind === 'flop-advice' ||
-    state.phase.kind === 'river-advice';
   const isShowdown = state.phase.kind === 'showdown';
 
   const activePlayerIdx =
@@ -153,23 +149,6 @@ export function GameView({ state, setState }: Props) {
             );
           })}
 
-          {isAdvice && (
-            <button
-              onClick={() => setState(advance(state))}
-              className="w-full py-3 rounded-lg bg-yellow-400 text-black font-bold active:bg-yellow-500"
-            >
-              Continue →
-            </button>
-          )}
-
-          {isShowdown && (
-            <button
-              onClick={() => setState(startGame(state, state.numPlayers))}
-              className="w-full py-3 rounded-lg bg-yellow-400 text-black font-bold active:bg-yellow-500"
-            >
-              Next hand
-            </button>
-          )}
         </div>
       )}
     </div>

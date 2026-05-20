@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { GameView } from './components/GameView';
 import { CardPicker } from './components/CardPicker';
+import { ActionBar } from './components/ActionBar';
 import type { GameState } from './lib/state';
 import { initialState, pickCard } from './lib/state';
 
@@ -16,12 +17,12 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Top half: game state */}
+      {/* Top: game state */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <GameView state={state} setState={setState} />
       </div>
 
-      {/* Bottom half: card picker */}
+      {/* Card picker */}
       <div className="border-t-2 border-white/10 bg-felt p-1">
         <CardPicker
           picked={state.picked}
@@ -29,6 +30,9 @@ export default function App() {
           disabled={pickerDisabled}
         />
       </div>
+
+      {/* Persistent action bar */}
+      <ActionBar state={state} setState={setState} />
     </div>
   );
 }
