@@ -41,7 +41,7 @@ export function SettingsScreen({
   };
 
   return (
-    <div className="absolute inset-0 z-50 bg-feltDark/95 flex flex-col">
+    <div className="absolute inset-0 z-50 bg-feltDark flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 bg-feltDark border-b border-white/10">
         <div className="text-sm font-semibold">Settings</div>
         <div className="flex gap-2">
