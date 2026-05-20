@@ -18,6 +18,8 @@ import {
   bonusReturn,
   bonusRowReturn,
 } from '../lib/bonus';
+import type { BlindPaytable } from '../lib/paytables';
+import { BLIND_ROW_LABELS, DEFAULT_BLIND } from '../lib/paytables';
 import type { BetSettings } from '../lib/bets';
 import { BET_FIELDS, DEFAULT_BETS } from '../lib/bets';
 
@@ -26,6 +28,8 @@ interface Props {
   setPaytable: (p: TripsPaytable) => void;
   bonusPaytable: BonusPaytable;
   setBonusPaytable: (p: BonusPaytable) => void;
+  blindPaytable: BlindPaytable;
+  setBlindPaytable: (p: BlindPaytable) => void;
   bets: BetSettings;
   setBets: (b: BetSettings) => void;
   onClose: () => void;
@@ -36,6 +40,8 @@ export function SettingsScreen({
   setPaytable,
   bonusPaytable,
   setBonusPaytable,
+  blindPaytable,
+  setBlindPaytable,
   bets,
   setBets,
   onClose,
@@ -55,6 +61,14 @@ export function SettingsScreen({
     setBonusPaytable({ ...bonusPaytable, [key]: n });
   };
 
+  const updateBlind = (key: keyof BlindPaytable, side: 'num' | 'den', value: string) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    if (side === 'den' && n === 0) return; // avoid divide-by-zero
+    const next = { ...blindPaytable, [key]: { ...blindPaytable[key], [side]: n } };
+    setBlindPaytable(next);
+  };
+
   const updateBet = (key: keyof BetSettings, value: string) => {
     const n = Number(value);
     if (!Number.isFinite(n)) return;
@@ -70,6 +84,7 @@ export function SettingsScreen({
             onClick={() => {
               setPaytable({ ...DEFAULT_TRIPS });
               setBonusPaytable({ ...DEFAULT_BONUS });
+              setBlindPaytable({ ...DEFAULT_BLIND });
               setBets({ ...DEFAULT_BETS });
             }}
             className="text-xs px-2 py-1 rounded bg-white/10 active:bg-white/20"
@@ -111,6 +126,67 @@ export function SettingsScreen({
           <div className="text-[10px] text-white/40">
             Play is dynamic (4× / 2× / 1× × Ante driven by the strategy) so
             it's not editable here. Trips and Bonus are placeholders.
+          </div>
+        </section>
+
+        {/* Blind (Bet) paytable */}
+        <section className="space-y-2">
+          <h2 className="text-xs uppercase tracking-wider text-white/60">
+            Bet payouts (Blind paytable)
+          </h2>
+          <div className="text-[11px] text-white/60">
+            The Blind pays a "Num to Den" ratio when the player wins with a
+            straight or higher. Wins with less than a straight push the
+            Blind; losses lose it.
+          </div>
+
+          <div className="rounded-lg overflow-hidden border border-white/10">
+            <div className="grid grid-cols-[1.6fr_1fr_auto_1fr_1fr] text-[10px] uppercase tracking-wider bg-white/5 text-white/50">
+              <div className="px-2 py-1.5">Hand</div>
+              <div className="px-2 py-1.5 text-right">Num</div>
+              <div className="px-1 py-1.5 text-center text-white/30">to</div>
+              <div className="px-2 py-1.5 text-right">Den</div>
+              <div className="px-2 py-1.5 text-right">=</div>
+            </div>
+            {BLIND_ROW_LABELS.map(({ key, label }) => {
+              const r = blindPaytable[key];
+              const ratio = r.den === 0 ? 0 : r.num / r.den;
+              return (
+                <div
+                  key={key}
+                  className="grid grid-cols-[1.6fr_1fr_auto_1fr_1fr] text-xs items-center border-t border-white/10"
+                >
+                  <div className="px-2 py-1.5 whitespace-nowrap">{label}</div>
+                  <div className="px-1 py-1">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={r.num}
+                      onChange={(e) => updateBlind(key, 'num', e.target.value)}
+                      className="w-full bg-white/10 rounded px-1.5 py-1 text-right text-white font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    />
+                  </div>
+                  <div className="text-center text-white/40 text-[10px]">to</div>
+                  <div className="px-1 py-1">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      value={r.den}
+                      onChange={(e) => updateBlind(key, 'den', e.target.value)}
+                      className="w-full bg-white/10 rounded px-1.5 py-1 text-right text-white font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    />
+                  </div>
+                  <div className="px-2 py-1.5 text-right text-white/60 tabular-nums">
+                    ×{Number.isInteger(ratio) ? ratio : ratio.toFixed(2)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="text-[10px] text-white/40">
+            Changes take effect immediately at showdown — the player row and
+            BET payout above will update without restarting the hand.
           </div>
         </section>
 

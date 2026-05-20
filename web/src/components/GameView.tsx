@@ -13,6 +13,7 @@ import { CardChip } from './CardChip';
 import { PaytablesPanel } from './PaytablesPanel';
 import type { TripsPaytable } from '../lib/trips';
 import type { BonusPaytable } from '../lib/bonus';
+import type { BlindPaytable } from '../lib/paytables';
 import type {
   FlopAction,
   PreFlopAction,
@@ -26,6 +27,7 @@ interface Props {
   setState: (s: GameState) => void;
   paytable: TripsPaytable;
   bonusPaytable: BonusPaytable;
+  blindPaytable: BlindPaytable;
   onEditPaytable: () => void;
   scaledByPlayer?: (ScaledOutcome | null)[] | null;
 }
@@ -48,7 +50,7 @@ const actionLabel = (
   }
 };
 
-export function GameView({ state, setState, paytable, bonusPaytable, onEditPaytable, scaledByPlayer }: Props) {
+export function GameView({ state, setState, paytable, bonusPaytable, blindPaytable, onEditPaytable, scaledByPlayer }: Props) {
   const isSetup = state.phase.kind === 'setup';
   const isShowdown = state.phase.kind === 'showdown';
 
@@ -133,7 +135,7 @@ export function GameView({ state, setState, paytable, bonusPaytable, onEditPayta
                 No fixed width — the panel sizes to its content so labels
                 like "Str Flush" / "4 of Kind" never wrap. */}
             <div className="shrink-0">
-              <PaytablesPanel trips={paytable} bonus={bonusPaytable} />
+              <PaytablesPanel trips={paytable} bonus={bonusPaytable} blind={blindPaytable} />
             </div>
           </div>
 
@@ -171,8 +173,8 @@ export function GameView({ state, setState, paytable, bonusPaytable, onEditPayta
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1.5">
+                <div className="flex items-stretch gap-2">
+                  <div className="flex gap-1.5 shrink-0 items-center">
                     <CardChip
                       card={p.hole[0]}
                       highlight={isActive && state.phase.kind === 'dealing-holes' && state.phase.slot === 0}
@@ -182,20 +184,15 @@ export function GameView({ state, setState, paytable, bonusPaytable, onEditPayta
                       highlight={isActive && state.phase.kind === 'dealing-holes' && state.phase.slot === 1}
                     />
                   </div>
-                  {p.play > 0 && (
-                    <div className="text-[11px] text-white/60">
-                      Play {p.play}× · staked {2 + p.play}
-                    </div>
-                  )}
-                  {p.folded && <div className="text-[11px] text-rose-300">folded</div>}
+                  {p.folded && <div className="text-[11px] text-rose-300 self-center">folded</div>}
                   {isShowdown && p.result && (
                     <PlayerResult
                       result={p.result}
                       scaled={scaledByPlayer?.[i] ?? null}
                     />
                   )}
+                  {!isShowdown && <AdviceStats player={p} phase={state.phase.kind} />}
                 </div>
-                {!isShowdown && <AdviceStats player={p} phase={state.phase.kind} />}
                 {!isShowdown && (
                   <ActionButtons
                     state={state}
@@ -239,25 +236,20 @@ function AdviceStats({
   let altLabel = '';
   let evChosen = 0;
   let evAlt = 0;
-  let stakeChosen = 0;
-  let exact = false;
 
   if (player.riverAdv) {
     const a = player.riverAdv;
     stats = a.stats;
-    exact = true;
     if (a.action === 'bet1x') {
       chosenLabel = 'bet 1×';
       altLabel = 'fold';
       evChosen = a.evBet;
       evAlt = a.evFold;
-      stakeChosen = a.stakeBet;
     } else {
       chosenLabel = 'fold';
       altLabel = 'bet 1×';
       evChosen = a.evFold;
       evAlt = a.evBet;
-      stakeChosen = a.stakeFold;
     }
   } else if (player.flopAdv) {
     const a = player.flopAdv;
@@ -267,13 +259,11 @@ function AdviceStats({
       altLabel = 'check';
       evChosen = a.evBet;
       evAlt = a.evCheck;
-      stakeChosen = a.stakeBet;
     } else {
       chosenLabel = 'check';
       altLabel = 'bet 2×';
       evChosen = a.evCheck;
       evAlt = a.evBet;
-      stakeChosen = a.stakeCheck;
     }
   } else if (player.preFlopAdv) {
     const a = player.preFlopAdv;
@@ -283,13 +273,11 @@ function AdviceStats({
       altLabel = 'check';
       evChosen = a.evBet;
       evAlt = a.evCheck;
-      stakeChosen = a.stakeBet;
     } else {
       chosenLabel = 'check';
       altLabel = 'bet 4×';
       evChosen = a.evCheck;
       evAlt = a.evBet;
-      stakeChosen = a.stakeBet; // not really staked when checking, but shown for context
     }
   }
 
@@ -307,37 +295,36 @@ function AdviceStats({
     phase === 'dealing-dealer';
   if (!showFor) return null;
 
+  const chosenIsBetter = evChosen >= evAlt;
+  const pillBase = 'px-1.5 py-0.5 rounded-md tabular-nums transition-colors';
+  const pillBest = 'bg-emerald-400/10 ring-1 ring-emerald-400/40';
+  const pillDim = 'opacity-70';
+
   return (
-    <div className="mt-2 px-2 py-1.5 rounded bg-black/20 text-[11px] leading-tight">
-      <div className="flex items-center gap-3 text-white/70">
-        <span>
-          W <span className="text-white">{fmtPct(stats.win)}</span>
+    <div className="flex-1 min-w-0 self-stretch px-2 py-1.5 rounded-md bg-black/25 text-[11px] leading-tight flex flex-col justify-center gap-1.5">
+      <div className="flex rounded-md overflow-hidden text-[11px] tabular-nums">
+        <span className="flex-1 px-2 py-1 bg-emerald-400/15 text-center">
+          <span className="text-emerald-300/90">W</span>{' '}
+          <span className="text-white font-semibold">{fmtPct(stats.win)}</span>
         </span>
-        <span>
-          T <span className="text-white">{fmtPct(stats.tie)}</span>
+        <span className="flex-1 px-2 py-1 bg-white/5 text-center border-x border-black/30">
+          <span className="text-white/50">T</span>{' '}
+          <span className="text-white/80 font-semibold">{fmtPct(stats.tie)}</span>
         </span>
-        <span>
-          L <span className="text-white">{fmtPct(stats.lose)}</span>
-        </span>
-        <span className="ml-auto text-white/40 text-[10px]">
-          {exact ? `exact (n=${stats.trials})` : `MC n=${stats.trials}`}
+        <span className="flex-1 px-2 py-1 bg-rose-400/15 text-center">
+          <span className="text-rose-300/90">L</span>{' '}
+          <span className="text-white font-semibold">{fmtPct(stats.lose)}</span>
         </span>
       </div>
-      <div className="mt-1 flex items-center gap-3">
-        <span className="text-white/70">
-          {chosenLabel}{' '}
+      <div className="flex items-center gap-1.5">
+        <span className={`${pillBase} ${chosenIsBetter ? pillBest : pillDim}`}>
+          <span className="text-white/60">{chosenLabel}</span>{' '}
           <span className={`font-bold ${evColor(evChosen)}`}>{fmtEV(evChosen)}</span>
         </span>
-        <span className="text-white/40">vs</span>
-        <span className="text-white/70">
-          {altLabel}{' '}
+        <span className={`${pillBase} ${!chosenIsBetter ? pillBest : pillDim}`}>
+          <span className="text-white/60">{altLabel}</span>{' '}
           <span className={`font-bold ${evColor(evAlt)}`}>{fmtEV(evAlt)}</span>
         </span>
-        {stakeChosen > 0 && (
-          <span className="ml-auto text-white/40 text-[10px]">
-            stake {stakeChosen}
-          </span>
-        )}
       </div>
     </div>
   );
