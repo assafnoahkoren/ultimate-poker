@@ -129,8 +129,10 @@ export function GameView({ state, setState, paytable, bonusPaytable, onEditPayta
               </div>
             </div>
 
-            {/* Combined Trips + Bonus paytables (compact, single panel) */}
-            <div className="w-32 shrink-0">
+            {/* Combined Trips + Bonus paytables (compact, single panel).
+                No fixed width — the panel sizes to its content so labels
+                like "Str Flush" / "4 of Kind" never wrap. */}
+            <div className="shrink-0">
               <PaytablesPanel trips={paytable} bonus={bonusPaytable} />
             </div>
           </div>

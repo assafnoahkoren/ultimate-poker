@@ -23,7 +23,7 @@ export function PaytablesPanel({ trips, bonus }: Props) {
         </span>
         {TRIPS_ROW_LABELS.map(({ key, short }) => (
           <div key={key} className="contents">
-            <span className="text-white/70">{short}</span>
+            <span className="text-white/70 whitespace-nowrap">{short}</span>
             <span className="text-white font-bold text-right tabular-nums">
               {trips[key]}
             </span>
@@ -32,7 +32,7 @@ export function PaytablesPanel({ trips, bonus }: Props) {
             </span>
           </div>
         ))}
-        <span className="text-white/70">Other</span>
+        <span className="text-white/70 whitespace-nowrap">Other</span>
         <span className="text-white/60 text-right tabular-nums">−1</span>
         <span className="text-white/60 text-right tabular-nums">0</span>
       </div>
